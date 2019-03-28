@@ -59,7 +59,7 @@ conditions in the WHERE clause.
 */
 
 
-// load the title.basics.tsv file (after quote-correction)   ~ 357 seconds
+// load the title.basics.tsv file (after quote-correction)   ~ 313 seconds
 
 // tconst  titleType       primaryTitle    originalTitle   isAdult startYear       endYear runtimeMinutes  genres
 // tt0000001       short   Carmencita      Carmencita      0       1894    \N      1       Documentary,Short
@@ -72,7 +72,8 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.basics.tsv'
  WITH line                            LIMIT 20
  WHERE line.isAdult = '0'  // skip the adult productions
  MERGE (n:Prod {tconst: line.tconst})  // create node if doesn't exist yet
-   SET n.titleType =      split(line.titleType,','),
+   ON CREATE SET
+     n.titleType =      split(line.titleType,','),
  	   n.title =          line.primaryTitle,
  	   n.originalTitle =  line.originalTitle,
  	   n.startYear =      toInteger(line.startYear),
@@ -97,7 +98,8 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/title.episode.tsv'
  MATCH (t:Prod {tconst: line.tconst}), (series:Prod {tconst: line.parentTconst})
   WHERE exists(t.tconst) AND exists(series.tconst)  // were they found?
  MERGE (t)-[ep:EPISODE_OF]->(series)  // create relationship if doesn't exist yet
- SET   ep.season = toInteger(line.seasonNumber),
+  ON CREATE SET
+       ep.season = toInteger(line.seasonNumber),
        ep.number = toInteger(line.episodeNumber),
        t:Episode,     // add label :Episode
        series:Series  // add label :Series
