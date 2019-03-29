@@ -69,7 +69,7 @@ CREATE CONSTRAINT ON (c:Prod) ASSERT c.tconst IS UNIQUE
 USING PERIODIC COMMIT 10000
 LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.basics.tsv'
  AS line FIELDTERMINATOR '\t'
- WITH line                            LIMIT 20
+ WITH line                           // LIMIT 20
  WHERE line.isAdult = '0'  // skip the adult productions
  MERGE (n:Prod {tconst: line.tconst})  // create node if doesn't exist yet
    ON CREATE SET
