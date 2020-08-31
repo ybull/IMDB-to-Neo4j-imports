@@ -1,7 +1,9 @@
 /* Cypher script for loading IMDB into Neo4j
 
-Created to use with our IS490DA class.
-March 2019
+Created to use with our IS497DA class.
+Revised Aug 2020
+
+https://neo4j.com/developer/guide-import-csv/
 
 Important TIPS:
 
@@ -12,13 +14,14 @@ Important TIPS:
      out the LIMIT n clause and re-execute that part so it will load all the
      nodes or relationships it's supposed to.
 3. Some of the IMDB TSV files have improper quotes that LOAD CSV chokes on.
-     I will provide a Python script that can rewrite them as TSVs with
-     compatible quote delimiters. Those files are all called "fixed..." below
-4. The file:///... paths below are RELATIVE to your Neo4j
-     project's 'IMPORT' directory, unless you decide to change the
+     I provided a Python script in this repository that can rewrite them as
+     TSVs with compatible quote delimiters. Those files are all called
+     "fixed..." when referenced below.
+4. The file:///... paths below are RELATIVE to your Neo4j database's
+     'import' subdirectory, unless you change the
      dbms.directories.import configuration setting.
-5. PROFILE each big query first before you run it, especially if you
-     modified it!  Read the section EAGER LOADING for why.
+5. First use EXPLAIN keyword before each query first before you run it,
+     especially if you modified it!  Read the section EAGER LOADING for why.
 6. If you load all this, it will take well over 20GB of disk space as a graph
      database. A section below and the in-class discussion will help you decide
      and learn how you can modify the LOAD CSV statements according to your
@@ -28,17 +31,18 @@ Important TIPS:
 ** EAGER LOADING
 
 As I worked on developing this loading script, I noticed in some cases, the
-Neo4j Browser had a small warning about 'eager loading'.  Some of the LOAD CSV
+Neo4j Browser had a small warning about 'eager loading'. Some of the LOAD CSV
 statements would work anyway, but the largest ones ran for a couple hours and
 still I had to kill them!
 
 That wasn't explained well in the official documentation but I found a few
-blog posts about it.  The best one was this:
+blog posts about it. The best are these:
 https://markhneedham.com/blog/2014/10/23/neo4j-cypher-avoiding-the-eager/
+https://community.neo4j.com/t/cypher-sleuthing-the-eager-operator/10730
 
-We'll look at this behavior in class. The problem is if ANY operation in
-the query plan uses "eager loading" then it will override the "PERIODIC COMMIT",
-converting the query into one potentially gigantic transaction.
+The problem is if ANY operation in the query plan uses "eager loading" then it
+will override the "PERIODIC COMMIT", converting the query into one potentially
+gigantic transaction.
 
 
 ** IF YOU WANT TO LIMIT THE PORTION(s) of IMDB that you load
@@ -59,17 +63,16 @@ conditions in the WHERE clause.
 */
 
 
-// load the title.basics.tsv file (after quote-correction)   ~ 313 seconds
-
+// load the title.basics.tsv file (after quote-correction) ~ Took 517 seconds first try
 // tconst  titleType       primaryTitle    originalTitle   isAdult startYear       endYear runtimeMinutes  genres
 // tt0000001       short   Carmencita      Carmencita      0       1894    \N      1       Documentary,Short
 
 CREATE CONSTRAINT ON (c:Prod) ASSERT c.tconst IS UNIQUE
  
-USING PERIODIC COMMIT 10000
+:auto USING PERIODIC COMMIT 10000
 LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.basics.tsv'
  AS line FIELDTERMINATOR '\t'
- WITH line                           // LIMIT 20
+ WITH line                           LIMIT 20
  WHERE line.isAdult = '0'  // skip the adult productions
  MERGE (n:Prod {tconst: line.tconst})  // create node if doesn't exist yet
    ON CREATE SET
@@ -82,7 +85,7 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.basics.tsv'
  	   n.genres =         split(line.genres,',')
  
 
-// load the title.episode.tsv  (no modifications needed)    ~ 206 seconds
+// load the title.episode.tsv.gz  (no modifications needed)    ~ 266 seconds
 
 // tconst  parentTconst    seasonNumber    episodeNumber
 // tt0041951       tt0041038       1       9
@@ -90,8 +93,8 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.basics.tsv'
 // tt0042889       tt0989125       \N      \N
 // tt0043426       tt0040051       3       42
 
-USING PERIODIC COMMIT 10000
-LOAD CSV WITH HEADERS FROM 'file:///IMDB/title.episode.tsv'
+:auto USING PERIODIC COMMIT 10000
+LOAD CSV WITH HEADERS FROM 'file:///IMDB/title.episode.tsv.gz'
  AS line FIELDTERMINATOR '\t'
  WITH line                          LIMIT 20
    // search for both titles listed in the row:
@@ -105,19 +108,20 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/title.episode.tsv'
        series:Series  // add label :Series
        
 
-// load the name.basics.tsv file (after quote-correction)   ~ 521 seconds
+// load the name.basics.tsv file (after quote-correction)
 
 // nconst  primaryName     birthYear       deathYear       primaryProfession       knownForTitles
 // nm0000001       Fred Astaire    1899    1987    soundtrack,actor,miscellaneous  tt0043044,tt0053137,tt0072308,tt0050419
 
 CREATE CONSTRAINT ON (p:Person) ASSERT p.nconst IS UNIQUE
 
-USING PERIODIC COMMIT 10000
+:auto USING PERIODIC COMMIT 10000
 LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.name.basics.tsv'
  AS line FIELDTERMINATOR '\t'
  WITH line                    LIMIT 20
  MERGE (n:Person {nconst: line.nconst})    // create node if doesn't exist yet
- SET 	n.name = 				line.primaryName,
+  ON CREATE SET
+    n.name = 				line.primaryName,
  		n.birthYear =			toInteger(line.birthYear),
  		n.deathYear =			toInteger(line.deathYear),
  		n.primaryProfession =	split(line.primaryProfession, ',')
@@ -131,9 +135,9 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.name.basics.tsv'
 // tt0000001	3	nm0374658	cinematographer	director of photography	\N
        
        
-//  Create the :ACTED_IN relationships.    Took mine ~713 seconds       
-// PROFILE 
-USING PERIODIC COMMIT 10000
+//  Create the :ACTED_IN relationships.
+// EXPLAIN
+:auto USING PERIODIC COMMIT 10000
 LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.principals.tsv'
  AS line FIELDTERMINATOR '\t'
  WITH line                         LIMIT 200
@@ -143,11 +147,10 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.principals.tsv'
   		AND line.category IN ['actor','actress']
 // Add the relationship type needed, based on category:
 MERGE (p)-[r:ACTED_IN]->(t)  // create relationship if doesn't exist yet
-	ON CREATE SET 	r.order = line.ordering, r.characters = line.characters
-	ON MATCH SET 	r.order = line.ordering, r.characters = line.characters
+ ON CREATE SET 	r.order = line.ordering, r.characters = line.characters
        
-//  Create the :DIRECTED relationships.    Took mine ~ 356 seconds       
-USING PERIODIC COMMIT 10000
+//  Create the :DIRECTED relationships.
+:auto USING PERIODIC COMMIT 10000
 LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.principals.tsv'
  AS line FIELDTERMINATOR '\t'
  WITH line                         LIMIT 200
@@ -157,11 +160,10 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.principals.tsv'
   		AND line.category = 'director'
 // Add the relationship type needed, based on category:
 MERGE (p)-[r:DIRECTED]->(t)  // create relationship if doesn't exist yet
-	ON CREATE SET r.order = line.ordering, r.job = line.job
-	ON MATCH SET  r.order = line.ordering, r.job = line.job
+ ON CREATE SET r.order = line.ordering, r.job = line.job
     
-//  Create the :WRITER_OF relationships.    Took mine ~ 323 seconds       
-USING PERIODIC COMMIT 10000
+//  Create the :WRITER_OF relationships.
+:auto USING PERIODIC COMMIT 10000
 LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.principals.tsv'
  AS line FIELDTERMINATOR '\t'
  WITH line                         LIMIT 200
@@ -171,8 +173,7 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.principals.tsv'
   		AND line.category = 'writer'
 // Add the relationship type needed, based on category:
 MERGE (p)-[r:WRITER_OF]->(t)  // create relationship if doesn't exist yet
-	ON CREATE SET r.order = line.ordering, r.job = line.job
-	ON MATCH SET  r.order = line.ordering, r.job = line.job
+ ON CREATE SET  r.order = line.ordering, r.job = line.job
         
 
 /*  OTHER DATA WE COULD LOAD...
