@@ -74,6 +74,8 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.basics.tsv'
  AS line FIELDTERMINATOR '\t'
  WITH line                           LIMIT 20
  WHERE line.isAdult = '0'  // skip the adult productions
+ // Uncomment the line below if you're extremely low on disk space or don't want tvSeries, tvEpisodes, etc.
+ // AND 'movie' in split(line.titleType, ',')  // skips all types but movies
  MERGE (n:Prod {tconst: line.tconst})  // create node if doesn't exist yet
    ON CREATE SET
      n.titleType =      split(line.titleType,','),
