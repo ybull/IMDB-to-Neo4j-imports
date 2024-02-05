@@ -67,12 +67,11 @@ conditions in the WHERE clause.
 // tconst  titleType       primaryTitle    originalTitle   isAdult startYear       endYear runtimeMinutes  genres
 // tt0000001       short   Carmencita      Carmencita      0       1894    \N      1       Documentary,Short
 
-CREATE CONSTRAINT ON (c:Prod) ASSERT c.tconst IS UNIQUE
+CREATE CONSTRAINT FOR (c:Prod) REQUIRE c.tconst IS UNIQUE;
  
-:auto USING PERIODIC COMMIT 10000
-LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.basics.tsv'
+LOAD CSV WITH HEADERS FROM 'file:///Downloads/IMDB/fixed.title.basics.tsv'
  AS line FIELDTERMINATOR '\t'
- WITH line                           LIMIT 20
+ WITH line                           LIMIT 200
  WHERE line.isAdult = '0'  // skip the adult productions
  // Uncomment the line below if you're extremely low on disk space or don't want tvSeries, tvEpisodes, etc.
  // AND 'movie' in split(line.titleType, ',')  // skips all types but movies
@@ -84,7 +83,7 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.basics.tsv'
  	   n.startYear =      toInteger(line.startYear),
  	   n.endYear =        toInteger(line.endYear),
  	   n.runtimeMinutes = toInteger(line.runtimeMinutes),
- 	   n.genres =         split(line.genres,',')
+ 	   n.genres =         split(line.genres,',');
  
 
 // load the title.episode.tsv.gz  (no modifications needed)    ~ 266 seconds
@@ -95,19 +94,18 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.basics.tsv'
 // tt0042889       tt0989125       \N      \N
 // tt0043426       tt0040051       3       42
 
-:auto USING PERIODIC COMMIT 10000
 LOAD CSV WITH HEADERS FROM 'file:///IMDB/title.episode.tsv.gz'
  AS line FIELDTERMINATOR '\t'
  WITH line                          LIMIT 20
    // search for both titles listed in the row:
  MATCH (t:Prod {tconst: line.tconst}), (series:Prod {tconst: line.parentTconst})
-  WHERE exists(t.tconst) AND exists(series.tconst)  // were they found?
+  WHERE t.tconst IS NOT NULL AND series.tconst IS NOT NULL  // were they found?
  MERGE (t)-[ep:EPISODE_OF]->(series)  // create relationship if doesn't exist yet
   ON CREATE SET
        ep.season = toInteger(line.seasonNumber),
        ep.number = toInteger(line.episodeNumber),
        t:Episode,     // add label :Episode
-       series:Series  // add label :Series
+       series:Series;  // add label :Series
        
 
 // load the name.basics.tsv file (after quote-correction)
@@ -115,7 +113,7 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/title.episode.tsv.gz'
 // nconst  primaryName     birthYear       deathYear       primaryProfession       knownForTitles
 // nm0000001       Fred Astaire    1899    1987    soundtrack,actor,miscellaneous  tt0043044,tt0053137,tt0072308,tt0050419
 
-CREATE CONSTRAINT ON (p:Person) ASSERT p.nconst IS UNIQUE
+CREATE CONSTRAINT ON (p:Person) ASSERT p.nconst IS UNIQUE;
 
 :auto USING PERIODIC COMMIT 10000
 LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.name.basics.tsv'
@@ -126,7 +124,7 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.name.basics.tsv'
     n.name = 				line.primaryName,
  		n.birthYear =			toInteger(line.birthYear),
  		n.deathYear =			toInteger(line.deathYear),
- 		n.primaryProfession =	split(line.primaryProfession, ',')
+ 		n.primaryProfession =	split(line.primaryProfession, ',');
  	   
        
 // load the fixed.title.principals.tsv IN PARTS to avoid 'EAGER LOADING'
@@ -143,39 +141,36 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.name.basics.tsv'
 LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.principals.tsv'
  AS line FIELDTERMINATOR '\t'
  WITH line                         LIMIT 200
- MATCH (p:Person {nconst: line.nconst})
- MATCH (t:Prod {tconst: line.tconst})
+ MATCH (p:Person {nconst: line.nconst}), (t:Prod {tconst: line.tconst})
   WHERE exists(p.nconst) AND exists(t.tconst)
   		AND line.category IN ['actor','actress']
-// Add the relationship type needed, based on category:
-MERGE (p)-[r:ACTED_IN]->(t)  // create relationship if doesn't exist yet
- ON CREATE SET 	r.order = line.ordering, r.characters = line.characters
+ // Add the relationship type needed, based on category:
+ MERGE (p)-[r:ACTED_IN]->(t)  // create relationship if doesn't exist yet
+  ON CREATE SET 	r.order = line.ordering, r.characters = line.characters;
        
 //  Create the :DIRECTED relationships.
 :auto USING PERIODIC COMMIT 10000
 LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.principals.tsv'
  AS line FIELDTERMINATOR '\t'
  WITH line                         LIMIT 200
- MATCH (p:Person {nconst: line.nconst})
- MATCH (t:Prod {tconst: line.tconst})
+ MATCH (p:Person {nconst: line.nconst}), (t:Prod {tconst: line.tconst})
   WHERE exists(p.nconst) AND exists(t.tconst)
   		AND line.category = 'director'
-// Add the relationship type needed, based on category:
-MERGE (p)-[r:DIRECTED]->(t)  // create relationship if doesn't exist yet
- ON CREATE SET r.order = line.ordering, r.job = line.job
+ // Add the relationship type needed, based on category:
+ MERGE (p)-[r:DIRECTED]->(t)  // create relationship if doesn't exist yet
+  ON CREATE SET r.order = line.ordering, r.job = line.job;
     
 //  Create the :WRITER_OF relationships.
 :auto USING PERIODIC COMMIT 10000
 LOAD CSV WITH HEADERS FROM 'file:///IMDB/fixed.title.principals.tsv'
  AS line FIELDTERMINATOR '\t'
  WITH line                         LIMIT 200
- MATCH (p:Person {nconst: line.nconst})
- MATCH (t:Prod {tconst: line.tconst})
+ MATCH (p:Person {nconst: line.nconst}), (t:Prod {tconst: line.tconst})
   WHERE exists(p.nconst) AND exists(t.tconst)
   		AND line.category = 'writer'
-// Add the relationship type needed, based on category:
-MERGE (p)-[r:WRITER_OF]->(t)  // create relationship if doesn't exist yet
- ON CREATE SET  r.order = line.ordering, r.job = line.job
+ // Add the relationship type needed, based on category:
+ MERGE (p)-[r:WRITER_OF]->(t)  // create relationship if doesn't exist yet
+  ON CREATE SET  r.order = line.ordering, r.job = line.job;
         
 
 /*  OTHER DATA WE COULD LOAD...
