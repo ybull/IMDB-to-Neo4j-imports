@@ -69,6 +69,7 @@ conditions in the WHERE clause.
 
 CREATE CONSTRAINT FOR (c:Prod) REQUIRE c.tconst IS UNIQUE;
  
+:auto USING PERIODIC COMMIT 10000
 LOAD CSV WITH HEADERS FROM 'file:///Downloads/IMDB/fixed.title.basics.tsv'
  AS line FIELDTERMINATOR '\t'
  WITH line                           LIMIT 200
@@ -94,6 +95,7 @@ LOAD CSV WITH HEADERS FROM 'file:///Downloads/IMDB/fixed.title.basics.tsv'
 // tt0042889       tt0989125       \N      \N
 // tt0043426       tt0040051       3       42
 
+:auto USING PERIODIC COMMIT 10000
 LOAD CSV WITH HEADERS FROM 'file:///IMDB/title.episode.tsv.gz'
  AS line FIELDTERMINATOR '\t'
  WITH line                          LIMIT 20
