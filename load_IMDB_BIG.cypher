@@ -107,8 +107,7 @@ LOAD CSV WITH HEADERS FROM 'file:///IMDB/title.episode.tsv.gz'
        ep.season = toInteger(line.seasonNumber),
        ep.number = toInteger(line.episodeNumber),
        t:Episode,     // add label :Episode
-       series:Series;  // add label :Series
-       
+       series:Series;  
 
 // load the name.basics.tsv file (after quote-correction)
 
